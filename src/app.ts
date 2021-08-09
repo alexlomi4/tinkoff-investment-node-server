@@ -1,18 +1,18 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
-var cors = require("cors");
+import { NextFunction, Response, Request } from 'express';
+import path = require('path');
+import cookieParser = require('cookie-parser');
+import logger = require('morgan');
+import cors = require('cors');
+import createError = require('http-errors');
+import express = require('express');
+import investmentRouter from './routes/investment';
+import indexRouter from './routes';
 
-var indexRouter = require('./routes');
-var investmentRouter = require('./routes/investment');
-
-var app = express();
+const app = express();
 app.use(cors());
 
 // view engine setup
-app.set('views', path.join(__dirname, 'views'));
+app.set('views', path.join(__dirname, '../views'));
 app.set('view engine', 'jade');
 
 app.use(logger('dev'));
@@ -25,12 +25,12 @@ app.use('/', indexRouter);
 app.use('/investment', investmentRouter);
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
+app.use((req: Request, res: Response, next: NextFunction) => {
   next(createError(404));
 });
 
 // error handler
-app.use(function(err, req, res) {
+app.use((err: any, req: Request, res: Response) => {
   // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
@@ -40,4 +40,4 @@ app.use(function(err, req, res) {
   res.render('error');
 });
 
-module.exports = app;
+export default app;

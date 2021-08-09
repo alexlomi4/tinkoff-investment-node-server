@@ -1,27 +1,25 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "allowSyntheticDefaultImports": true,
+    "target": "es6",
     "module": "commonjs",
     "moduleResolution": "node",
-    "outDir": "dist",
     "rootDir": ".",
+    "outDir": "dist",
     "allowJs": true,
     "strict": true,
     "noImplicitAny": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "types": ["node", "express", "jest"],
-    "typeRoots" : ["./node_modules/@types"],
     "baseUrl": ".",
     "paths": {
-      "*": [
-        "node_modules/*",
-        "src/types/*"
-      ]
-    }
+      "*": ["src/@types", "node_modules/*"]
+    },
+    "typeRoots": [
+      "src/@types",
+      "./node_modules/@types"
+    ]
   },
-  "include": [
-    "src/**/*",
-    "bin/www.ts"
-  ],
+  "include": ["src/**/*", "bin/www.ts"],
 }

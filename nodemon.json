@@ -5,8 +5,8 @@
     "dist"
   ],
   "watch": [
-    "./src",
-    "./bin/www.ts"
+    "src/**/*.ts",
+    "bin/www.ts"
   ],
   "exec": "npm start",
   "ext": ".ts, .js"
