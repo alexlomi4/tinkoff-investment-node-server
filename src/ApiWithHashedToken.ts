@@ -14,4 +14,8 @@ export default class CustomApi extends OpenAPI implements ApiWithHashedToken {
     super({ apiURL, socketURL, secretToken, brokerAccountId });
     this.hashedToken = CryptoHelper.getHash(secretToken);
   }
+
+  getKeyForRequest(prefix: string): string {
+    return `${prefix} : ${this.hashedToken}`;
+  }
 }

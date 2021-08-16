@@ -71,4 +71,6 @@ export default class ApiWithHashedToken extends OpenAPI {
     secretToken,
     brokerAccountId,
   }: OpenApiConfig);
+
+  getKeyForRequest: (prefix: string) => string;
 }

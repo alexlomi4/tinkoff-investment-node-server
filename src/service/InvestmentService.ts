@@ -25,10 +25,6 @@ import {
 } from './utils';
 import { CashHelper } from '../utils/caching';
 
-function getDefaultKeyByApi(api: ApiWithHashedToken, prefix: string): string {
-  return `${prefix} : ${api.hashedToken}`;
-}
-
 async function getPriceInformation(
   api: ApiWithHashedToken,
   positionsMap: PortfolioPositionMap,
@@ -116,7 +112,7 @@ async function getLastPrice(
         figi,
       });
       return lastInstrumentPrice;
-    }, getDefaultKeyByApi(api, `lastPrice_${figi}`));
+    }, api.getKeyForRequest(`lastPrice_${figi}`));
   }
   return lastPrice;
 }
@@ -154,7 +150,7 @@ class InvestmentService {
   static async getAccounts(api: ApiWithHashedToken): Promise<UserAccount[]> {
     const { accounts } = await CashHelper.withPromiseCache<UserAccounts>(
       () => api.accounts(),
-      getDefaultKeyByApi(api, 'accounts')
+      api.getKeyForRequest('accounts')
     );
     return accounts;
   }
@@ -202,7 +198,7 @@ class InvestmentService {
             this.getOperations(api),
             api.portfolioCurrencies(),
           ]),
-        getDefaultKeyByApi(api, `positionsAndOperations_${accountIds[i]}`)
+        api.getKeyForRequest(`positionsAndOperations_${accountIds[i]}`)
       );
 
       positionMap = currentAccPositions
@@ -294,7 +290,7 @@ class InvestmentService {
             figi,
           });
           return { figi, currency, lastPrice };
-        }, getDefaultKeyByApi(api, `currency_${figi}`))
+        }, api.getKeyForRequest(`currency_${figi}`))
       )
     );
   }
