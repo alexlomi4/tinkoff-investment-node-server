@@ -1,16 +1,26 @@
-import { Response, Request } from 'express';
-import OpenAPI, {
-  Portfolio,
-  UserAccounts,
-  Operation,
-  PortfolioPosition,
-} from '@tinkoff/invest-openapi-js-sdk';
+import { Response, Request, Router, NextFunction } from 'express';
+import { Currency } from '@tinkoff/invest-openapi-js-sdk';
 import express = require('express');
-import { CurrencyRequest, PositionMap } from '../@types/investment';
+import ApiWithHashedToken, { CurrencyRequest } from '../@types/investment';
 import checkAuth from '../middleware/checkAuth';
+import checkPathId from '../middleware/checkPathId';
+import InvestmentService from '../service/InvestmentService';
+import CustomApi from '../ApiWithHashedToken';
 
-function getApi(secretToken: string, isProd: boolean): OpenAPI {
-  return new OpenAPI({
+function handleErrorAsync<T extends Request>(
+  func: (req: T, res: Response, next: NextFunction) => Promise<unknown>
+) {
+  return (req: T, res: Response, next: NextFunction): void => {
+    func(req, res, next).catch((error: Error) => {
+      console.error(`${req.originalUrl}: ${error.message}`);
+      res.status(500);
+      res.send('UnexpectedError');
+    });
+  };
+}
+
+function getApi(secretToken: string, isProd: boolean): ApiWithHashedToken {
+  return new CustomApi({
     apiURL: isProd
       ? 'https://api-invest.tinkoff.ru/openapi'
       : 'https://api-invest.tinkoff.ru/openapi/sandbox',
@@ -19,196 +29,116 @@ function getApi(secretToken: string, isProd: boolean): OpenAPI {
   });
 }
 
-function convertPositionWithPrice(
-  position: PortfolioPosition,
-  operationsForPosition: Operation[],
-  lastPrice?: number
-) {
-  const operationsNet = operationsForPosition.reduce(
-    (net, { operationType, payment, commission = {} }) => {
-      switch (operationType) {
-        case 'Buy':
-        case 'Sell':
-          return net + payment + (commission.value || 0);
-        case 'Dividend':
-        case 'TaxDividend':
-          return net + payment;
-        default:
-          return net;
-      }
-    },
-    0
-  );
-
-  return {
-    ...position,
-    lastPrice,
-    totalNet: operationsNet + (lastPrice || 0) * position.balance,
-    operationsNet,
-    currency:
-      position.averagePositionPrice && position.averagePositionPrice.currency,
-  };
-}
-
-async function getPriceInformation(
-  api: OpenAPI,
-  positionsMap: PositionMap,
-  operations: Operation[][]
-) {
-  const tickerPositions = await Promise.all(
-    Object.keys(positionsMap).map(async (ticker) => {
-      // the same for any account
-      const { figi } = positionsMap[ticker][0];
-      const { lastPrice } = await api.orderbookGet({ figi });
-      return {
-        [ticker]: positionsMap[ticker].map((position, index) => {
-          const operationsForPosition = operations[index].filter(
-            ({ figi: operFigi }) => operFigi === position.figi
-          );
-          return convertPositionWithPrice(
-            position,
-            operationsForPosition,
-            lastPrice
-          );
-        }),
-      };
-    })
-  );
-
-  return tickerPositions.reduce(
-    (obj, position) => ({
-      ...obj,
-      ...position,
-    }),
-    {}
-  );
-}
-
-async function getOperations(
-  api: OpenAPI,
-  from: string = new Date('1970-01-01').toISOString()
-): Promise<Operation[]> {
-  const { operations } = await api.operations({
-    from,
-    to: new Date().toISOString(),
-  });
-  return operations;
-}
-
-async function getPositionsAndOperations(
-  api: OpenAPI,
-  accountIds: string[]
-): Promise<[PositionMap, Operation[][]]> {
-  const positionMap: PositionMap = {};
-  const operations = [];
-  for (let i = 0; i < accountIds.length; i += 1) {
-    // loop through all accounts to get all positions and operations
-    api.setCurrentAccountId(accountIds[i]);
-    const [
-      { positions: currentAccPositions },
-      currentAccOperations,
-    ]: // eslint-disable-next-line no-await-in-loop
-    [Portfolio, Operation[]] = await Promise.all([
-      api.portfolio(),
-      getOperations(api),
-    ]);
-
-    currentAccPositions.forEach((position) => {
-      const { figi } = position;
-      positionMap[figi] = [...(positionMap[figi] || []), position];
-    });
-    operations.push(
-      currentAccOperations.filter(({ status }) => status !== 'Decline')
-    );
+function getCurrencyList(req: CurrencyRequest): Currency[] {
+  if (!req.query || !req.query.list) {
+    return [];
   }
-
-  // fill empty positions
-  Object.keys(positionMap).forEach((ticker) => {
-    for (let i = 0; i < operations.length; i += 1) {
-      if (!positionMap[ticker][i]) {
-        positionMap[ticker][i] = {
-          ...positionMap[ticker][0],
-          balance: 0,
-          lots: 0,
-        };
-      }
-    }
-  });
-
-  return [positionMap, operations];
+  const currenciesList = req.query.list.split(/\s*,\s*/) as Currency[];
+  if (!currenciesList.length) {
+    return [];
+  }
+  return currenciesList;
 }
 
-async function getPortfolios(api: OpenAPI, accountIds: string[]) {
-  const [positionsMap, operations] = await getPositionsAndOperations(
-    api,
-    accountIds
-  );
-
-  return getPriceInformation(api, positionsMap, operations);
+function createRouterWithPathIdCheck(
+  parentRouter: Router,
+  path: string
+): Router {
+  const router = express.Router();
+  router.use(checkPathId);
+  parentRouter.use(path, router);
+  return router;
 }
-
-const CURRENCY_FIGIS: { [currency: string]: string } = {
-  USD: 'BBG0013HGFT4',
-  EUR: 'BBG0013HJJ31',
-};
 
 function createRouter(isProd: boolean) {
   const router = express.Router();
-
   router.use(checkAuth);
 
-  router.get('/accounts', async (req: Request, res: Response) => {
-    const { accounts } = await getApi(req.token, isProd).accounts();
-    res.json(accounts);
-  });
+  router.get(
+    '/accounts',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const accounts = await InvestmentService.getAccounts(
+        getApi(req.token, isProd)
+      );
+      res.json(accounts);
+    })
+  );
 
-  router.get('/currenciesInfo', async (req: CurrencyRequest, res: Response) => {
-    if (!req.query || !req.query.list) {
-      throw new Error('Please specify currencies');
-    }
-    const currenciesList: string[] = req.query.list.split(/\s*,\s*/);
-    if (!currenciesList.length) {
-      throw Error('Invalid params');
-    }
-    const infos = await Promise.all(
-      currenciesList
-        .filter((currency) => CURRENCY_FIGIS[currency])
-        .map(async (currency) => {
-          // TODO check if it should be another value
-          const { lastPrice } = await getApi(req.token, isProd).orderbookGet({
-            figi: CURRENCY_FIGIS[currency],
-          });
-          return { currency, lastPrice };
-        })
-    );
-    res.json(infos);
-  });
+  router.get(
+    '/currenciesInfo',
+    handleErrorAsync(async (req: CurrencyRequest, res: Response) => {
+      const infos = await InvestmentService.getCurrenciesInfo(
+        getApi(req.token, isProd),
+        getCurrencyList(req)
+      );
+      res.json(infos);
+    })
+  );
 
-  const portfoliosRouter = express.Router();
-  router.use('/portfolio', portfoliosRouter);
-
-  portfoliosRouter.get('/ALL', async (req: Request, res: Response) => {
-    const api = getApi(req.token, isProd);
-    const { accounts }: UserAccounts = await api.accounts();
-    const result = await getPortfolios(
-      api,
-      accounts.map(({ brokerAccountId }) => brokerAccountId)
-    );
-    res.json(result);
-  });
-
-  portfoliosRouter.get(
-    '/:brokerAccountId',
-    async (req: Request, res: Response) => {
-      const matchResult = req.url.match(/^\/(\d+)/);
-      if (!matchResult) {
-        throw new Error('no account id');
-      }
-      const brokerAccountId: string = matchResult[1];
-      const api = getApi(req.token, isProd);
-      const result = await getPortfolios(api, [brokerAccountId]);
+  const portfolioRouter = createRouterWithPathIdCheck(router, '/portfolio');
+  portfolioRouter.get(
+    '/',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getCurrentPositions(
+        getApi(req.token, isProd)
+      );
       res.json(result);
-    }
+    })
+  );
+  portfolioRouter.get(
+    '/:brokerAccountId',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getCurrentPositionsByIds(
+        getApi(req.token, isProd),
+        [req.pathId as string]
+      );
+      res.json(result);
+    })
+  );
+
+  const historicPositionsRouter = createRouterWithPathIdCheck(
+    router,
+    '/historicPositions'
+  );
+  historicPositionsRouter.get(
+    '/',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getHistoricPositions(
+        getApi(req.token, isProd)
+      );
+      res.json(result);
+    })
+  );
+  historicPositionsRouter.get(
+    '/:brokerAccountId',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getHistoricPositionsByIds(
+        getApi(req.token, isProd),
+        [req.pathId as string]
+      );
+      res.json(result);
+    })
+  );
+
+  const totalRouter = createRouterWithPathIdCheck(router, '/total');
+  totalRouter.get(
+    '/',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getTotal(
+        getApi(req.token, isProd)
+      );
+      res.json(result);
+    })
+  );
+  totalRouter.get(
+    '/:brokerAccountId',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await InvestmentService.getTotalByIds(
+        getApi(req.token, isProd),
+        [req.pathId as string]
+      );
+      res.json(result);
+    })
   );
 
   return router;
