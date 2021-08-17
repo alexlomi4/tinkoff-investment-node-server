@@ -107,12 +107,16 @@ async function getLastPrice(
       currenciesInfo.find(({ figi: currencyFigi }) => currencyFigi === figi) ||
       {});
   } else {
-    lastPrice = await CashHelper.withPromiseCache<number>(async () => {
-      const { lastPrice: lastInstrumentPrice = 0 } = await api.orderbookGet({
-        figi,
-      });
-      return lastInstrumentPrice;
-    }, api.getKeyForRequest(`lastPrice_${figi}`));
+    lastPrice = await CashHelper.withPromiseCache<number>(
+      async () => {
+        const { lastPrice: lastInstrumentPrice = 0 } = await api.orderbookGet({
+          figi,
+        });
+        return lastInstrumentPrice;
+      },
+      api.getKeyForRequest(`lastPrice_${figi}`),
+      3
+    );
   }
   return lastPrice;
 }
@@ -285,12 +289,16 @@ class InvestmentService {
     return Promise.all(
       currenciesWithFigi.map(async ({ figi, currency }) =>
         // TODO check if it should be another value
-        CashHelper.withPromiseCache<CurrencyInfo>(async () => {
-          const { lastPrice } = await api.orderbookGet({
-            figi,
-          });
-          return { figi, currency, lastPrice };
-        }, api.getKeyForRequest(`currency_${figi}`))
+        CashHelper.withPromiseCache<CurrencyInfo>(
+          async () => {
+            const { lastPrice } = await api.orderbookGet({
+              figi,
+            });
+            return { figi, currency, lastPrice };
+          },
+          api.getKeyForRequest(`currency_${figi}`),
+          3
+        )
       )
     );
   }

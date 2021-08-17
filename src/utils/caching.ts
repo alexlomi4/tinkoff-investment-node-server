@@ -1,7 +1,7 @@
 import NodeCache from 'node-cache';
 
 const SECONDS_IN_MINUTE = 60;
-const DEFAULT_TTL = SECONDS_IN_MINUTE * 1.01;
+const DEFAULT_TTL = SECONDS_IN_MINUTE;
 
 // eslint-disable-next-line import/prefer-default-export
 export class CashHelper {
