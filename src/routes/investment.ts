@@ -1,11 +1,11 @@
 import { Response, Request, Router, NextFunction } from 'express';
-import { Currency } from '@tinkoff/invest-openapi-js-sdk';
 import express = require('express');
-import ApiWithHashedToken, { CurrencyRequest } from '../@types/investment';
+import InvestmentService, {
+  CustomApi,
+} from 'tinkoff-investment-aggregate-service';
+import { CurrencyRequest } from '../types/investment';
 import checkAuth from '../middleware/checkAuth';
 import checkPathId from '../middleware/checkPathId';
-import InvestmentService from '../service/InvestmentService';
-import CustomApi from '../ApiWithHashedToken';
 
 function handleErrorAsync<T extends Request>(
   func: (req: T, res: Response, next: NextFunction) => Promise<unknown>
@@ -19,7 +19,7 @@ function handleErrorAsync<T extends Request>(
   };
 }
 
-function getApi(secretToken: string, isProd: boolean): ApiWithHashedToken {
+function getApi(secretToken: string, isProd: boolean) {
   return new CustomApi({
     apiURL: isProd
       ? 'https://api-invest.tinkoff.ru/openapi'
@@ -29,11 +29,11 @@ function getApi(secretToken: string, isProd: boolean): ApiWithHashedToken {
   });
 }
 
-function getCurrencyList(req: CurrencyRequest): Currency[] {
+function getCurrencyList(req: CurrencyRequest): string[] {
   if (!req.query || !req.query.list) {
     return [];
   }
-  const currenciesList = req.query.list.split(/\s*,\s*/) as Currency[];
+  const currenciesList = req.query.list.split(/\s*,\s*/);
   if (!currenciesList.length) {
     return [];
   }
@@ -69,7 +69,8 @@ function createRouter(isProd: boolean) {
     handleErrorAsync(async (req: CurrencyRequest, res: Response) => {
       const infos = await InvestmentService.getCurrenciesInfo(
         getApi(req.token, isProd),
-        getCurrencyList(req)
+        // TODO replace with actual types
+        getCurrencyList(req) as any
       );
       res.json(infos);
     })
