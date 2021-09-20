@@ -1,14 +1,14 @@
 {
-  "name": "server",
-  "version": "0.0.0",
+  "name": "tinkoff-investment-node-server",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "lint": "eslint . --ext .ts",
-    "copy-files": "copyfiles views/* src/public/*/* dist",
     "start": "ts-node bin/www.ts",
+    "start:nodemon": "./node_modules/nodemon/bin/nodemon.js",
     "start:prod": "npm run build && node ./dist/bin/www.js",
     "build": "rimraf ./dist && npx tsc && npm run copy-files",
-    "start:nodemon": "./node_modules/nodemon/bin/nodemon.js",
+    "copy-files": "copyfiles views/* src/public/*/* dist",
+    "lint": "eslint . --ext .ts",
     "test": "jest"
   },
   "dependencies": {
@@ -19,7 +19,7 @@
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
     "morgan": "~1.9.1",
-    "tinkoff-investment-aggregate-service": "git+https://github.com/alexlomi4/tinkoff-investment-aggregate-service.git"
+    "tinkoff-investment-aggregate-service": "file:../tinkoff-investment-aggregate-service"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.2",

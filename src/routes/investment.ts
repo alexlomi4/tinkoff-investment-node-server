@@ -1,53 +1,20 @@
-import { Response, Request, Router, NextFunction } from 'express';
+import { Request, Response } from 'express';
+import InvestmentService from 'tinkoff-investment-aggregate-service';
 import express = require('express');
-import InvestmentService, {
-  CustomApi,
-} from 'tinkoff-investment-aggregate-service';
 import { CurrencyRequest } from '../types/investment';
 import checkAuth from '../middleware/checkAuth';
-import checkPathId from '../middleware/checkPathId';
+import handleErrorAsync from '../middleware/handleErrorAsync';
 
-function handleErrorAsync<T extends Request>(
-  func: (req: T, res: Response, next: NextFunction) => Promise<unknown>
-) {
-  return (req: T, res: Response, next: NextFunction): void => {
-    func(req, res, next).catch((error: Error) => {
-      console.error(`${req.originalUrl}: ${error.message}`);
-      res.status(500);
-      res.send('UnexpectedError');
-    });
-  };
-}
-
-function getApi(secretToken: string, isProd: boolean) {
-  return new CustomApi({
-    apiURL: isProd
-      ? 'https://api-invest.tinkoff.ru/openapi'
-      : 'https://api-invest.tinkoff.ru/openapi/sandbox',
-    secretToken,
-    socketURL: 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws',
-  });
+// helpers
+function getServiceInstance(secretToken: string, isProd: boolean) {
+  return new InvestmentService(secretToken, isProd);
 }
 
 function getCurrencyList(req: CurrencyRequest): string[] {
   if (!req.query || !req.query.list) {
     return [];
   }
-  const currenciesList = req.query.list.split(/\s*,\s*/);
-  if (!currenciesList.length) {
-    return [];
-  }
-  return currenciesList;
-}
-
-function createRouterWithPathIdCheck(
-  parentRouter: Router,
-  path: string
-): Router {
-  const router = express.Router();
-  router.use(checkPathId);
-  parentRouter.use(path, router);
-  return router;
+  return req.query.list.split(/\s*,\s*/);
 }
 
 function createRouter(isProd: boolean) {
@@ -57,9 +24,10 @@ function createRouter(isProd: boolean) {
   router.get(
     '/accounts',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const accounts = await InvestmentService.getAccounts(
-        getApi(req.token, isProd)
-      );
+      const accounts = await getServiceInstance(
+        req.token,
+        isProd
+      ).getAccounts();
       res.json(accounts);
     })
   );
@@ -67,8 +35,10 @@ function createRouter(isProd: boolean) {
   router.get(
     '/currenciesInfo',
     handleErrorAsync(async (req: CurrencyRequest, res: Response) => {
-      const infos = await InvestmentService.getCurrenciesInfo(
-        getApi(req.token, isProd),
+      const infos = await getServiceInstance(
+        req.token,
+        isProd
+      ).getCurrenciesInfo(
         // TODO replace with actual types
         getCurrencyList(req) as any
       );
@@ -76,68 +46,69 @@ function createRouter(isProd: boolean) {
     })
   );
 
-  const portfolioRouter = createRouterWithPathIdCheck(router, '/portfolio');
+  const portfolioRouter = express.Router();
+  router.use('/portfolio', portfolioRouter);
+
   portfolioRouter.get(
     '/',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getCurrentPositions(
-        getApi(req.token, isProd)
-      );
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getCurrentPositions();
       res.json(result);
     })
   );
   portfolioRouter.get(
     '/:brokerAccountId',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getCurrentPositionsByIds(
-        getApi(req.token, isProd),
-        [req.pathId as string]
-      );
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getCurrentPositionsByIds([req.params.brokerAccountId as string]);
       res.json(result);
     })
   );
 
-  const historicPositionsRouter = createRouterWithPathIdCheck(
-    router,
-    '/historicPositions'
-  );
+  const historicPositionsRouter = express.Router();
+  router.use('/historicPositions', portfolioRouter);
+
   historicPositionsRouter.get(
     '/',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getHistoricPositions(
-        getApi(req.token, isProd)
-      );
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getHistoricPositions();
       res.json(result);
     })
   );
   historicPositionsRouter.get(
     '/:brokerAccountId',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getHistoricPositionsByIds(
-        getApi(req.token, isProd),
-        [req.pathId as string]
-      );
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getHistoricPositionsByIds([req.params.brokerAccountId as string]);
       res.json(result);
     })
   );
 
-  const totalRouter = createRouterWithPathIdCheck(router, '/total');
+  const totalRouter = express.Router();
+  router.use('/total', totalRouter);
   totalRouter.get(
     '/',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getTotal(
-        getApi(req.token, isProd)
-      );
+      const result = await getServiceInstance(req.token, isProd).getTotal();
       res.json(result);
     })
   );
   totalRouter.get(
     '/:brokerAccountId',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await InvestmentService.getTotalByIds(
-        getApi(req.token, isProd),
-        [req.pathId as string]
-      );
+      const result = await getServiceInstance(req.token, isProd).getTotalByIds([
+        req.params.brokerAccountId as string,
+      ]);
       res.json(result);
     })
   );
