@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import InvestmentService from 'tinkoff-investment-aggregate-service';
 import express = require('express');
-import { CurrencyRequest } from '../types/investment';
+// import { CurrencyRequest } from '../types/investment';
 import checkAuth from '../middleware/checkAuth';
 import handleErrorAsync from '../middleware/handleErrorAsync';
 
@@ -10,12 +10,12 @@ function getServiceInstance(secretToken: string, isProd: boolean) {
   return new InvestmentService(secretToken, isProd);
 }
 
-function getCurrencyList(req: CurrencyRequest): string[] {
-  if (!req.query || !req.query.list) {
-    return [];
-  }
-  return req.query.list.split(/\s*,\s*/);
-}
+// function getCurrencyList(req: CurrencyRequest): string[] {
+//   if (!req.query || !req.query.list) {
+//     return [];
+//   }
+//   return req.query.list.split(/\s*,\s*/);
+// }
 
 function createRouter(isProd: boolean) {
   const router = express.Router();
@@ -32,19 +32,16 @@ function createRouter(isProd: boolean) {
     })
   );
 
-  router.get(
-    '/currenciesInfo',
-    handleErrorAsync(async (req: CurrencyRequest, res: Response) => {
-      const infos = await getServiceInstance(
-        req.token,
-        isProd
-      ).getCurrenciesInfo(
-        // TODO replace with actual types
-        getCurrencyList(req) as any
-      );
-      res.json(infos);
-    })
-  );
+  // router.get(
+  //   '/currencyInfo',
+  //   handleErrorAsync(async (req: CurrencyRequest, res: Response) => {
+  //     const infos = await getServiceInstance(req.token, isProd).getCurrencyInfo(
+  //       // TODO replace with actual types
+  //       getCurrencyList(req) as any
+  //     );
+  //     res.json(infos);
+  //   })
+  // );
 
   const portfolioRouter = express.Router();
   router.use('/portfolio', portfolioRouter);
@@ -65,13 +62,38 @@ function createRouter(isProd: boolean) {
       const result = await getServiceInstance(
         req.token,
         isProd
-      ).getCurrentPositionsByIds([req.params.brokerAccountId as string]);
+      ).getCurrentPositions(req.params.brokerAccountId);
+      res.json(result);
+    })
+  );
+
+  const positionDetailsRouter = express.Router();
+  router.use('/positionTotalDetails', positionDetailsRouter);
+
+  positionDetailsRouter.get(
+    '/:brokerAccountId/:figi',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getPositionTotalDetails(req.params.figi, req.params.brokerAccountId);
+      res.json(result);
+    })
+  );
+
+  positionDetailsRouter.get(
+    '/:figi',
+    handleErrorAsync(async (req: Request, res: Response) => {
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getPositionTotalDetails(req.params.figi);
       res.json(result);
     })
   );
 
   const historicPositionsRouter = express.Router();
-  router.use('/historicPositions', portfolioRouter);
+  router.use('/historicPositions', historicPositionsRouter);
 
   historicPositionsRouter.get(
     '/',
@@ -89,7 +111,7 @@ function createRouter(isProd: boolean) {
       const result = await getServiceInstance(
         req.token,
         isProd
-      ).getHistoricPositionsByIds([req.params.brokerAccountId as string]);
+      ).getHistoricPositions(req.params.brokerAccountId);
       res.json(result);
     })
   );
@@ -99,16 +121,20 @@ function createRouter(isProd: boolean) {
   totalRouter.get(
     '/',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await getServiceInstance(req.token, isProd).getTotal();
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getPortfolioTotal();
       res.json(result);
     })
   );
   totalRouter.get(
     '/:brokerAccountId',
     handleErrorAsync(async (req: Request, res: Response) => {
-      const result = await getServiceInstance(req.token, isProd).getTotalByIds([
-        req.params.brokerAccountId as string,
-      ]);
+      const result = await getServiceInstance(
+        req.token,
+        isProd
+      ).getPortfolioTotal(req.params.brokerAccountId);
       res.json(result);
     })
   );
